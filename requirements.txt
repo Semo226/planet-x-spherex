@@ -12,3 +12,12 @@ requests>=2.31
 # Web stack (planned backend — frontend deps live in frontend/package.json)
 fastapi>=0.110
 uvicorn>=0.29
+fastapi==0.110.0
+uvicorn==0.28.0
+astropy==8.0.2
+astroquery==0.4.11
+pyvo==1.10.0
+numpy
+pandas
+matplotlib
+requests
