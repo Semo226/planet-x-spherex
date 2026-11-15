@@ -1,0 +1,12 @@
+# Core scientific stack
+astropy>=6.0
+astroquery>=0.4.7
+pyvo>=1.5
+numpy>=1.26
+pandas>=2.1
+matplotlib>=3.8
+requests>=2.31
+
+# Web stack (planned backend — frontend deps live in frontend/package.json)
+fastapi>=0.110
+uvicorn>=0.29

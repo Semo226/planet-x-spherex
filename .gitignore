@@ -1,0 +1,30 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Data / caches — never commit large FITS or query caches
+*.fits
+*.fits.fz
+*.fits.gz
+sample-data/**/*.fits
+!sample-data/README.md
+cache/
+.ipynb_checkpoints/
+
+# Secrets / env
+.env
+*.key
+*.pem
+
+# Node / frontend
+node_modules/
+dist/
+build/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Planet X and SPHEREx — Epoch Viewer</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Planet X and SPHEREx</h1>
+    <p class="subtitle">NASA Space Apps 2026 — SPHEREx epoch explorer</p>
+  </header>
+
+  <section class="controls">
+    <div class="field">
+      <label for="ra">RA (deg)</label>
+      <input id="ra" type="number" step="any" value="133.795129" />
+    </div>
+    <div class="field">
+      <label for="dec">Dec (deg)</label>
+      <input id="dec" type="number" step="any" value="-7.245147" />
+    </div>
+    <div class="field">
+      <label for="fov">FOV (deg)</label>
+      <input id="fov" type="number" step="any" value="0.05" min="0.005" max="1" />
+    </div>
+    <div class="field">
+      <label for="maxframes">Max frames</label>
+      <input id="maxframes" type="number" value="60" min="1" max="300" />
+    </div>
+    <button id="preset" title="Load WISE 0855 coordinates">WISE 0855</button>
+    <button id="load" class="primary">Load / Search</button>
+  </section>
+
+  <div id="status" class="status">Ready.</div>
+
+  <main class="viewer-layout">
+    <div class="viewer">
+      <img id="frame-img" alt="SPHEREx cutout frame" />
+      <div id="empty" class="empty">No data loaded.<br/>Enter coordinates and press <b>Load / Search</b>.</div>
+    </div>
+
+    <aside class="meta">
+      <h2>Frame</h2>
+      <div class="meta-row"><span>Index</span><b id="m-index">—</b></div>
+      <div class="meta-row"><span>Time (UTC)</span><b id="m-time">—</b></div>
+      <div class="meta-row"><span>Obs ID</span><b id="m-obs">—</b></div>
+      <div class="meta-row"><span>Detector</span><b id="m-det">—</b></div>
+      <div class="meta-row"><span>Bandpass</span><b id="m-band">—</b></div>
+      <div class="meta-row"><span>Epochs found</span><b id="m-epochs">—</b></div>
+      <p class="meta-note" title="SPHEREx carries six detector arrays (D1–D6) in its focal plane. As the spacecraft scans the sky over months, the same sky position is observed by different arrays on different epochs — so the Detector label changes frame to frame.">ⓘ Detector = SPHEREx focal-plane array (D1–D6). It changes across epochs because the survey scans this field with different arrays on different dates.</p>
+    </aside>
+
+    <aside class="catalog">
+      <h2>Catalog Cross-Match</h2>
+      <div id="cat-status" class="cat-status pending"><span class="spinner" id="cat-spinner" hidden></span><span id="cat-status-text">Not queried</span></div>
+      <div id="cat-summary" class="cat-summary"></div>
+      <div id="cat-matches" class="cat-matches"></div>
+      <div id="cat-flags" class="cat-flags"></div>
+      <div id="cat-warnings" class="cat-warnings"></div>
+      <div id="cat-disclaimer" class="cat-disclaimer"></div>
+    </aside>
+  </main>
+
+  <section class="transport">
+    <div class="view-toggle" role="group" aria-label="View mode">
+      <button id="view-orig" class="active">Original</button>
+      <button id="view-diff" disabled title="Run difference imaging first">Processed (Difference)</button>
+    </div>
+    <button id="play" disabled>▶ Play</button>
+    <input id="slider" type="range" min="0" max="0" value="0" disabled />
+    <label class="speed">Speed
+      <select id="speed" disabled>
+        <option value="2000">0.5×</option>
+        <option value="1000" selected>1×</option>
+        <option value="400">2×</option>
+        <option value="150">4×</option>
+      </select>
+    </label>
+    <span id="frame-count" class="frame-count">0 / 0</span>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>
