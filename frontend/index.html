@@ -61,12 +61,20 @@
       <div id="cat-warnings" class="cat-warnings"></div>
       <div id="cat-disclaimer" class="cat-disclaimer"></div>
     </aside>
+
+    <aside class="candidates">
+      <h2>Candidate Detections</h2>
+      <div id="cand-status" class="cat-status pending"><span class="spinner" id="cand-spinner" hidden></span><span id="cand-status-text">Not analyzed</span></div>
+      <div id="cand-summary" class="cand-summary"></div>
+      <div id="cand-list" class="cand-list"></div>
+    </aside>
   </main>
 
   <section class="transport">
     <div class="view-toggle" role="group" aria-label="View mode">
       <button id="view-orig" class="active">Original</button>
       <button id="view-diff" disabled title="Run difference imaging first">Processed (Difference)</button>
+      <button id="run-candidates" disabled title="Run Phase 5 candidate detection & motion pipeline">🔬 Analyze</button>
     </div>
     <button id="play" disabled>▶ Play</button>
     <input id="slider" type="range" min="0" max="0" value="0" disabled />

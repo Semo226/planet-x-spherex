@@ -27,15 +27,16 @@ sys.path.insert(0, str(ROOT))
 from backend.data_service import get_spherex_cutouts  # noqa: E402
 from backend.catalog_service import crossmatch  # noqa: E402
 from processing.diff_imaging import build_difference_stack  # noqa: E402
+from processing.pipeline import run_candidate_pipeline  # noqa: E402
 
-app = FastAPI(title="Planet X and SPHEREx API", version="0.2.0")
+app = FastAPI(title="Planet X and SPHEREx API", version="0.3.0")
 
 FRONTEND_DIR = ROOT / "frontend"
 CACHE_DIR = Path(__file__).resolve().parent / "cache"
 
 # In-memory "session": latest query result. Fine for single-user hackathon.
 _lock = threading.Lock()
-_session: dict = {"frames": [], "diff": None}
+_session: dict = {"frames": [], "diff": None, "candidates": None}
 
 
 class QueryRequest(BaseModel):
@@ -43,6 +44,8 @@ class QueryRequest(BaseModel):
     dec: float = Field(..., ge=-90, le=90)
     fov_size: float = Field(0.05, gt=0, le=1.0)
     max_frames: int | None = Field(60, ge=1, le=300)
+    detector: str | None = Field(None, description="Optional SPHEREx detector filter (e.g. D1-D6)")
+    bandpass: str | None = Field(None, description="Optional SPHEREx bandpass name")
 
 
 @app.get("/api/health")
@@ -75,14 +78,17 @@ def query(req: QueryRequest):
             "png": f"/api/frame/{f['index']}.png",
         })
     with _lock:
-        _session = {"frames": result["frames"], "diff": None,
+        _session = {"frames": result["frames"], "diff": None, "candidates": None,
                     "request": {"ra": req.ra, "dec": req.dec,
-                                "fov_size": req.fov_size}}
+                                "fov_size": req.fov_size,
+                                "detector": req.detector,
+                                "bandpass": req.bandpass}}
     return JSONResponse({
         "ra": result["ra"], "dec": result["dec"],
         "fov_size": result["fov_size"],
         "n_results": result["n_results"],
         "n_epochs": result["n_epochs"],
+        "detector": req.detector,
         "offline": result.get("offline", False),
         "frames": frames,
     })
@@ -102,8 +108,9 @@ def frame(index: int):
 
 class ProcessRequest(BaseModel):
     align: bool = True
-    method: str = "median"   # 'median' (only method implemented so far)
-    detector: str | None = None  # e.g. 'D3'; None = auto (most common)
+    align_method: str = "wcs"   # 'wcs' (Phase 5 celestial WCS reprojection) | 'phase' (Phase 3 FFT)
+    method: str = "median"      # 'median' (only method implemented so far)
+    detector: str | None = None # e.g. 'D3'; None = auto (most common)
 
 
 @app.post("/api/process")
@@ -133,9 +140,14 @@ def process(req: ProcessRequest):
     fits_paths = [f["fits_path"] for f in sel]
     import hashlib
     tag = hashlib.sha256(
-        (detector + fits_paths[0] + fits_paths[-1]).encode()).hexdigest()[:12]
+        (detector + req.align_method + fits_paths[0] + fits_paths[-1]).encode()).hexdigest()[:12]
     out_dir = CACHE_DIR / "diff" / tag
-    result = build_difference_stack(fits_paths, out_dir, align=req.align)
+    result = build_difference_stack(
+        fits_paths,
+        out_dir,
+        align=req.align,
+        align_method=req.align_method,
+    )
 
     diff_frames = []
     for i, f in enumerate(sel):
@@ -155,14 +167,60 @@ def process(req: ProcessRequest):
                             "limits": result["limits"],
                             "template_png": result["template_png"],
                             "detector": detector,
+                            "align_method": result.get("alignment_method", req.align_method),
                             "frames": diff_frames}
     return {
         "detector": detector,
+        "align_method": result.get("alignment_method", req.align_method),
         "n_frames": result["n_frames"],
         "limits": result["limits"],
         "template_png": "/api/diff/template.png",
         "frames": diff_frames,
     }
+
+
+@app.post("/api/candidates")
+def candidates():
+    """Run the Phase 5 candidate detection pipeline on the current session frames.
+
+    Uses WCS-aligned difference imaging, false positive filtering (FLAGS/VARIANCE/PSF),
+    and motion detection to produce a scored candidate table.
+    """
+    with _lock:
+        frames = list(_session["frames"])
+        req_data = _session.get("request", {})
+    if not frames:
+        raise HTTPException(status_code=400,
+                            detail="no frames loaded — run /api/query first")
+
+    ra = req_data.get("ra", 0.0)
+    dec = req_data.get("dec", 0.0)
+    fits_paths = [f["fits_path"] for f in frames]
+
+    try:
+        result = run_candidate_pipeline(fits_paths, ra, dec)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Pipeline error: {exc}")
+
+    # Attach frame timing metadata and cross-match candidates
+    from backend.catalog_service import classify_candidate_target
+    for c in result.get("candidates", []):
+        c["target_ra"] = ra
+        c["target_dec"] = dec
+        c_ra = c.get("ra_deg", ra)
+        c_dec = c.get("dec_deg", dec)
+        try:
+            cat = crossmatch(c_ra, c_dec, radius_arcsec=10.0)
+            c["catalog_classification"] = cat.get("classification")
+            c["classification"] = classify_candidate_target(c, cat)
+            c["catalog_summary"] = cat.get("summary")
+        except Exception:
+            c["catalog_classification"] = "unqueried"
+
+    with _lock:
+        _session["candidates"] = result
+
+    return result
 
 
 @app.get("/api/diff/template.png")

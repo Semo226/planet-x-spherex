@@ -82,6 +82,14 @@ async function load() {
   $("play").disabled = true;
   $("speed").disabled = true;
   $("view-diff").disabled = true;
+  if ($("run-candidates")) $("run-candidates").disabled = true;
+  if ($("cand-status-text")) {
+    $("cand-status-text").textContent = "Not analyzed";
+    $("cand-status").className = "cat-status pending";
+    $("cand-spinner").hidden = true;
+    $("cand-list").innerHTML = "";
+    $("cand-summary").textContent = "";
+  }
   $("view-orig").classList.add("active");
   $("view-diff").classList.remove("active");
   viewMode = "orig";
@@ -220,18 +228,89 @@ async function buildDiffStack() {
     $("view-diff").textContent = diffReady
       ? `Processed (Difference · ${data.detector})`
       : "Processed (Difference)";
+    $("run-candidates").disabled = !diffReady;
     setStatus(
       `Loaded ${frames.length} frames (${"?"} epochs). ` +
       `Difference stack ready: detector ${data.detector}, ${data.n_frames} residual frames ` +
       `(limits ${(data.limits || []).map((v) => v.toExponential(1)).join(" … ")}).`,
       "ok"
     );
+    if (diffReady) runCandidates();
   } catch (e) {
     setStatus(`Difference imaging request failed: ${e}`, "error");
   }
 }
 
+async function runCandidates() {
+  $("cand-status-text").textContent = "Analyzing candidate motion…";
+  $("cand-status").className = "cat-status pending";
+  $("cand-spinner").hidden = false;
+  $("cand-list").innerHTML = "";
+  $("cand-summary").textContent = "";
+  try {
+    const res = await fetch("/api/candidates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      $("cand-status-text").textContent = "Analysis error";
+      $("cand-status").className = "cat-status error";
+      $("cand-spinner").hidden = true;
+      $("cand-summary").textContent = data.detail || res.status;
+      return;
+    }
+    renderCandidates(data);
+  } catch (e) {
+    $("cand-status-text").textContent = "Analysis error";
+    $("cand-status").className = "cat-status error";
+    $("cand-spinner").hidden = true;
+    $("cand-summary").textContent = String(e);
+  }
+}
+
+function renderCandidates(data) {
+  $("cand-spinner").hidden = true;
+  const n = data.n_candidates || 0;
+  const high = (data.candidates || []).filter(c => c.classification === "high_priority" || c.classification === "high_priority_candidate" || c.classification === "solar_system_target").length;
+
+  if (n === 0) {
+    $("cand-status-text").textContent = "No candidates detected";
+    $("cand-status").className = "cat-status known";
+    $("cand-summary").textContent = `Processed ${data.alignment?.n_aligned || "?"} aligned frames. Residual σ = ${(data.stack_stats?.residual_std ?? 0).toExponential(2)} MJy/sr.`;
+    $("cand-list").innerHTML = '<div class="cat-detail">Field is clean — no residuals above 3σ.</div>';
+    return;
+  }
+
+  const statusCls = high > 0 ? "candidate" : "known";
+  $("cand-status-text").textContent = high > 0 ? `${high} priority candidate(s)` : `${n} candidate(s)`;
+  $("cand-status").className = "cat-status " + statusCls;
+  $("cand-summary").textContent = `${n} candidate(s) from ${data.alignment?.n_aligned || "?"} aligned frames. Residual σ = ${(data.stack_stats?.residual_std ?? 0).toExponential(2)} MJy/sr.`;
+
+  const cards = (data.candidates || []).slice(0, 15).map((c, i) => {
+    const confCls = c.confidence >= 70 ? "high" : c.confidence >= 40 ? "med" : "low";
+    const motionTag = c.motion?.is_moving ? `<span class="cand-badge motion">Moving ${(c.motion.displacement_arcsec || 0).toFixed(1)}″</span>` : "";
+    const psfTag = c.psf_eval?.morphology ? `<span class="cand-badge psf">${esc(c.psf_eval.morphology)}</span>` : "";
+    const flagIssues = (c.flag_eval?.issues || []).map(f => `<div class="cat-flag">⚠ ${esc(f)}</div>`).join("");
+    const catMatch = c.catalog_summary ? `<div class="cat-detail">${esc(c.catalog_summary)}</div>` : "";
+    return `<div class="cand-card ${c.classification}">
+      <div class="cand-header">
+        <span class="cand-rank">#${i + 1}</span>
+        <span class="cand-conf ${confCls}">${c.confidence?.toFixed(0) ?? "?"}%</span>
+        <span class="cand-class">${esc(c.classification?.replace(/_/g, " ") ?? "")}</span>
+        ${motionTag}${psfTag}
+      </div>
+      <div class="cand-coords">RA ${(c.ra_deg ?? 0).toFixed(6)}° Dec ${(c.dec_deg ?? 0).toFixed(6)}° · SNR ${(c.snr ?? 0).toFixed(1)} · ${c.n_epoch_detections ?? 0} ep</div>
+      ${catMatch}
+      ${flagIssues}
+    </div>`;
+  });
+  $("cand-list").innerHTML = cards.join("");
+}
+
 $("load").addEventListener("click", load);
+$("run-candidates").addEventListener("click", runCandidates);
 $("view-orig").addEventListener("click", () => setViewMode("orig"));
 $("view-diff").addEventListener("click", () => setViewMode("diff"));
 $("preset").addEventListener("click", () => {

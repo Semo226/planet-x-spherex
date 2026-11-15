@@ -1,5 +1,17 @@
 # PROJECT_STATUS.md
 
+## Phase 5 — Candidate Detection, WCS Alignment & Pipeline Integration ✅
+
+| Module | Status | Notes |
+|--------|--------|-------|
+| 1. WCS Registration & Alignment (`processing/wcs_alignment.py`) | ✅ | Astropy WCS extraction (incl. SIP distortion terms) + `reproject.reproject_interp` onto common celestial grid; preserves array indexing and handles missing frames |
+| 2. Temporal Differencing & Motion (`processing/diff_imaging.py`, `processing/pipeline.py`) | ✅ | Median-stack subtraction + per-epoch peak tracking; measures coordinate shifts across epochs to detect moving targets (e.g., WISE 0855 motion) |
+| 3. False Positive Filtering & Noise (`processing/candidate_filter.py`) | ✅ | Evaluates `FLAGS` bitmasks (cosmic rays, dead pixels, saturation), `VARIANCE` local noise floor, and 2D Gaussian PSF morphology checks (compactness & correlation) to filter out artifacts |
+| 4. Catalog Cross-Matching & Classification (`backend/catalog_service.py`) | ✅ | Cross-matches candidates against Gaia DR3 + AllWISE with proper-motion propagation; classifies targets into `known_object`, `high_priority_candidate`, `solar_system_target`, and `discovery_candidate` |
+| 5. Pipeline Orchestration (`processing/pipeline.py`, `backend/main.py`) | ✅ | `run_candidate_pipeline` orchestrates stages; exposed via `POST /api/candidates`; returns scored candidates with confidence rating (0–100%) |
+| 6. Frontend UI Integration (`frontend/index.html`, `app.js`, `style.css`) | ✅ | Candidate Detections panel with rank badges, confidence scores, motion/PSF tags, interactive "Analyze" button, and synchronized difference viewer |
+| 7. Automated Testing | ✅ | 8/8 tests passing (`tests/test_wcs_alignment.py` and `tests/test_candidate_pipeline.py`) |
+
 ## Pre-Phase-5 — Bug Fixes, UI Polish & Offline Fallback ✅
 
 | Fix | Status | Notes |

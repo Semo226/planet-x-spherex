@@ -1,28 +1,29 @@
 """Alignment + difference imaging for SPHEREx cutout stacks.
 
 Pipeline:
-  1. Load IMAGE HDUs from cached cutout MEFs.
-  2. Align each frame to a reference via FFT phase correlation
-     (integer-pixel shift + bilinear subpixel refinement).
-  3. Build a median "static sky" template.
-  4. Residual_i = aligned_i - template  -> suppresses static sources,
-     leaves noise, coverage differences, and moving/transient objects.
-  5. Render residual PNGs with a diverging colormap.
-
-Honesty note: cutouts are re-centered on the target coordinates each
-epoch, so a source at the phase center stays fixed; difference frames
-highlight everything that is *not* static on the sky (noise, scattered
-light, true movers displaced from their catalog position, artifacts).
+  1. Load SPHEREx cutout MEFs and extract WCS / pixel data.
+  2. Align secondary frames onto the reference frame's celestial grid
+     (Phase 5: astropy WCS reprojection via `processing.wcs_alignment`;
+      Phase 3 fallback: FFT phase correlation translation).
+  3. Build a median "static sky" template from valid registered frames.
+  4. Residual_i = aligned_i - template  -> suppresses static celestial sources,
+     leaving transient events, variable sources, noise, and true movers.
+  5. Render residual PNGs with a diverging RdBu_r colormap and symmetric robust limits.
 """
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from astropy.io import fits
 
 from processing.render import _asinh_stretch  # reuse robust stretch
+from processing.wcs_alignment import align_fits_stack_wcs
+
+logger = logging.getLogger(__name__)
 
 
 def load_image(fits_path: str | Path) -> np.ndarray:
@@ -182,46 +183,92 @@ def render_residual_png(resid: np.ndarray, png_path: str | Path,
 
 def build_difference_stack(fits_paths: list[str | Path],
                            out_dir: str | Path,
-                           align: bool = True) -> dict:
+                           align: bool = True,
+                           align_method: str = "wcs",
+                           ref_index: int = 0) -> dict[str, Any]:
     """Full pipeline: load -> align -> median subtract -> render PNGs.
 
-    Returns dict with 'frames' (png paths), 'template_png', 'shifts',
-    'limits', 'n_frames'.
+    Parameters
+    ----------
+    fits_paths : list of (str or Path)
+        Paths to SPHEREx cutout FITS files.
+    out_dir : str or Path
+        Output directory for rendered diff PNGs.
+    align : bool, default True
+        Whether to align images before template construction.
+    align_method : str, default "wcs"
+        Alignment strategy:
+        - "wcs" (Phase 5): Astropy WCS celestial grid reprojection.
+        - "phase" (Phase 3): FFT phase-correlation translation.
+    ref_index : int, default 0
+        Reference frame index used for the celestial reference grid.
+
+    Returns
+    -------
+    dict with keys:
+        'n_frames', 'frames' (PNG paths), 'template_png', 'limits',
+        'shifts', 'alignment_method', 'alignment_metadata', 'out_dir'.
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load images; keep index alignment by substituting NaN planes for
-    # unreadable/misshapen frames.
-    raw: list[np.ndarray] = []
-    ref_shape: tuple[int, ...] | None = None
-    for p in fits_paths:
+    n_total = len(fits_paths)
+    if n_total == 0:
+        raise ValueError("fits_paths cannot be empty")
+
+    shifts: list[tuple[float, float]] = [(0.0, 0.0)] * n_total
+    alignment_meta: list[dict[str, Any]] = []
+    method_used = "none"
+
+    if align and align_method == "wcs":
         try:
-            img = load_image(p)
-            if img.ndim != 2 or img.size < 16:
-                raise ValueError(f"bad image shape {img.shape} in {p}")
-            if ref_shape is None:
-                ref_shape = img.shape
-            elif img.shape != ref_shape:
-                raise ValueError(f"shape mismatch {img.shape} vs {ref_shape} in {p}")
-            raw.append(img)
-        except Exception as exc:  # noqa: BLE001
-            print(f"[diff_imaging] skipping bad frame {p}: {exc}")
-            raw.append(np.full(ref_shape or (0, 0), np.nan))
-    images = raw
-    valid_idx = [i for i, im in enumerate(images)
-                 if np.isfinite(im).sum() > im.size * 0.5]
-    if not valid_idx:
-        raise ValueError("no usable frames in stack")
-    # Align only valid frames; NaN frames stay NaN.
-    sub = [images[i] for i in valid_idx]
-    shifts: list[tuple[float, float]] = [(0.0, 0.0)] * len(images)
-    if align and len(sub) > 1:
-        aligned_sub, sub_shifts = align_stack(sub)
-        for k, i in enumerate(valid_idx):
-            images[i] = aligned_sub[k]
-            shifts[i] = sub_shifts[k]
-    aligned = images
+            wcs_res = align_fits_stack_wcs(fits_paths, ref_index=ref_index)
+            images = wcs_res["aligned_images"]
+            alignment_meta = wcs_res["metadata"]
+            valid_idx = [i for i, m in enumerate(alignment_meta) if m["valid"]]
+            if not valid_idx:
+                raise ValueError("No valid frames produced by WCS alignment")
+            method_used = "wcs"
+        except Exception as exc:
+            logger.warning(
+                "[diff_imaging] WCS alignment failed (%s); falling back to phase correlation",
+                exc
+            )
+            align_method = "phase"
+
+    if not align or align_method != "wcs":
+        # Load images raw; keep index alignment by substituting NaN planes
+        raw: list[np.ndarray] = []
+        ref_shape: tuple[int, ...] | None = None
+        for p in fits_paths:
+            try:
+                img = load_image(p)
+                if img.ndim != 2 or img.size < 16:
+                    raise ValueError(f"bad image shape {img.shape} in {p}")
+                if ref_shape is None:
+                    ref_shape = img.shape
+                elif img.shape != ref_shape:
+                    raise ValueError(f"shape mismatch {img.shape} vs {ref_shape} in {p}")
+                raw.append(img)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[diff_imaging] skipping bad frame %s: %s", p, exc)
+                raw.append(np.full(ref_shape or (0, 0), np.nan))
+
+        images = raw
+        valid_idx = [i for i, im in enumerate(images)
+                     if np.isfinite(im).sum() > im.size * 0.5]
+        if not valid_idx:
+            raise ValueError("no usable frames in stack")
+
+        if align and align_method == "phase" and len(valid_idx) > 1:
+            sub = [images[i] for i in valid_idx]
+            aligned_sub, sub_shifts = align_stack(sub)
+            for k, i in enumerate(valid_idx):
+                images[i] = aligned_sub[k]
+                shifts[i] = sub_shifts[k]
+            method_used = "phase"
+        else:
+            method_used = "none"
 
     valid_aligned = [images[i] for i in valid_idx]
     valid_set = set(valid_idx)
@@ -256,5 +303,7 @@ def build_difference_stack(fits_paths: list[str | Path],
         "template_png": str(out_dir / "template.png"),
         "limits": [vmin, vmax],
         "shifts": shifts,
+        "alignment_method": method_used,
+        "alignment_metadata": alignment_meta,
         "out_dir": str(out_dir),
     }

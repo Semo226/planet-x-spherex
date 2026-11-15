@@ -1,1 +1,425 @@
-{"openapi":"3.1.0","info":{"title":"Planet X and SPHEREx API","version":"0.2.0"},"paths":{"/api/health":{"get":{"summary":"Health","operationId":"health_api_health_get","responses":{"200":{"description":"Successful Response","content":{"application/json":{"schema":{}}}}}}},"/api/query":{"post":{"summary":"Query","description":"Query IRSA, download+render cutouts, return frame metadata.","operationId":"query_api_query_post","requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/QueryRequest"}}},"required":true},"responses":{"200":{"description":"Successful Response","content":{"application/json":{"schema":{}}}},"422":{"description":"Validation Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/HTTPValidationError"}}}}}}},"/api/frame/{index}.png":{"get":{"summary":"Frame","operationId":"frame_api_frame__index__png_get","parameters":[{"name":"index","in":"path","required":true,"schema":{"type":"integer","title":"Index"}}],"responses":{"200":{"description":"Successful Response","content":{"application/json":{"schema":{}}}},"422":{"description":"Validation Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/HTTPValidationError"}}}}}}},"/api/process":{"post":{"summary":"Process","description":"Build aligned difference-imaging stack for the current session.","operationId":"process_api_process_post","requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ProcessRequest"}}},"required":true},"responses":{"200":{"description":"Successful Response","content":{"application/json":{"schema":{}}}},"422":{"description":"Validation Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/HTTPValidationError"}}}}}}},"/api/diff/{index}.png":{"get":{"summary":"Diff Frame","operationId":"diff_frame_api_diff__index__png_get","parameters":[{"name":"index","in":"path","required":true,"schema":{"type":"integer","title":"Index"}}],"responses":{"200":{"description":"Successful Response","content":{"application/json":{"schema":{}}}},"422":{"description":"Validation Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/HTTPValidationError"}}}}}}},"/api/diff/template.png":{"get":{"summary":"Diff Template","operationId":"diff_template_api_diff_template_png_get","responses":{"200":{"description":"Successful Response","content":{"application/json":{"schema":{}}}}}}},"/api/presets":{"get":{"summary":"Presets","operationId":"presets_api_presets_get","responses":{"200":{"description":"Successful Response","content":{"application/json":{"schema":{}}}}}}}},"components":{"schemas":{"HTTPValidationError":{"properties":{"detail":{"items":{"$ref":"#/components/schemas/ValidationError"},"type":"array","title":"Detail"}},"type":"object","title":"HTTPValidationError"},"ProcessRequest":{"properties":{"align":{"type":"boolean","title":"Align","default":true},"method":{"type":"string","title":"Method","default":"median"}},"type":"object","title":"ProcessRequest"},"QueryRequest":{"properties":{"ra":{"type":"number","maximum":360.0,"minimum":0.0,"title":"Ra"},"dec":{"type":"number","maximum":90.0,"minimum":-90.0,"title":"Dec"},"fov_size":{"type":"number","maximum":1.0,"exclusiveMinimum":0.0,"title":"Fov Size","default":0.05},"max_frames":{"anyOf":[{"type":"integer","maximum":300.0,"minimum":1.0},{"type":"null"}],"title":"Max Frames","default":60}},"type":"object","required":["ra","dec"],"title":"QueryRequest"},"ValidationError":{"properties":{"loc":{"items":{"anyOf":[{"type":"string"},{"type":"integer"}]},"type":"array","title":"Location"},"msg":{"type":"string","title":"Message"},"type":{"type":"string","title":"Error Type"},"input":{"title":"Input"},"ctx":{"type":"object","title":"Context"}},"type":"object","required":["loc","msg","type"],"title":"ValidationError"}}}}
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Planet X and SPHEREx API",
+    "version": "0.3.0"
+  },
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/query": {
+      "post": {
+        "summary": "Query",
+        "description": "Query IRSA, download+render cutouts, return frame metadata.",
+        "operationId": "query_api_query_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/frame/{index}.png": {
+      "get": {
+        "summary": "Frame",
+        "operationId": "frame_api_frame__index__png_get",
+        "parameters": [
+          {
+            "name": "index",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Index"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/process": {
+      "post": {
+        "summary": "Process",
+        "description": "Build aligned difference-imaging stack for the current session.\n\nFrames are grouped by detector array \u2014 SPHEREx's six arrays have\nindependent distortion solutions, so mixing them produces misaligned\nresiduals. `detector=None` auto-selects the most common detector.",
+        "operationId": "process_api_process_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProcessRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/candidates": {
+      "post": {
+        "summary": "Candidates",
+        "description": "Run the Phase 5 candidate detection pipeline on the current session frames.\n\nUses WCS-aligned difference imaging, false positive filtering (FLAGS/VARIANCE/PSF),\nand motion detection to produce a scored candidate table.",
+        "operationId": "candidates_api_candidates_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/diff/template.png": {
+      "get": {
+        "summary": "Diff Template",
+        "operationId": "diff_template_api_diff_template_png_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/diff/{index}.png": {
+      "get": {
+        "summary": "Diff Frame",
+        "operationId": "diff_frame_api_diff__index__png_get",
+        "parameters": [
+          {
+            "name": "index",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Index"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/catalog": {
+      "post": {
+        "summary": "Catalog",
+        "description": "Cross-match position against Gaia DR3 + AllWISE.",
+        "operationId": "catalog_api_catalog_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/presets": {
+      "get": {
+        "summary": "Presets",
+        "operationId": "presets_api_presets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CatalogRequest": {
+        "properties": {
+          "ra": {
+            "type": "number",
+            "maximum": 360.0,
+            "minimum": 0.0,
+            "title": "Ra"
+          },
+          "dec": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Dec"
+          },
+          "radius_arcsec": {
+            "type": "number",
+            "maximum": 120.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Radius Arcsec",
+            "default": 10.0
+          },
+          "epoch": {
+            "type": "number",
+            "title": "Epoch",
+            "default": 2025.5
+          }
+        },
+        "type": "object",
+        "required": [
+          "ra",
+          "dec"
+        ],
+        "title": "CatalogRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ProcessRequest": {
+        "properties": {
+          "align": {
+            "type": "boolean",
+            "title": "Align",
+            "default": true
+          },
+          "align_method": {
+            "type": "string",
+            "title": "Align Method",
+            "default": "wcs"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method",
+            "default": "median"
+          },
+          "detector": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detector"
+          }
+        },
+        "type": "object",
+        "title": "ProcessRequest"
+      },
+      "QueryRequest": {
+        "properties": {
+          "ra": {
+            "type": "number",
+            "maximum": 360.0,
+            "minimum": 0.0,
+            "title": "Ra"
+          },
+          "dec": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Dec"
+          },
+          "fov_size": {
+            "type": "number",
+            "maximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Fov Size",
+            "default": 0.05
+          },
+          "max_frames": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 300.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Frames",
+            "default": 60
+          }
+        },
+        "type": "object",
+        "required": [
+          "ra",
+          "dec"
+        ],
+        "title": "QueryRequest"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

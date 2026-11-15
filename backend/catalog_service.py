@@ -365,6 +365,43 @@ def crossmatch(ra: float, dec: float,
     return _catalog_cache_store_or_load(ra, dec, result, warnings)
 
 
+def classify_candidate_target(candidate: dict[str, Any],
+                              catalog_result: dict[str, Any]) -> str:
+    """Classify a candidate using both pipeline detection and catalog cross-matching.
+
+    Categories:
+      - 'known_object': Source matches Gaia DR3 or AllWISE within tolerance.
+      - 'solar_system_target': Fast-moving candidate (displacement > 0.5") with
+        no optical stellar counterpart in Gaia.
+      - 'high_priority_candidate': Uncataloged point source with good PSF and SNR,
+        consistent with cold brown dwarf or Planet X analog.
+      - 'discovery_candidate': Uncataloged source requiring human follow-up.
+      - 'unmatched_within_tolerance': Nearby catalog sources exist (3-10") but none within 3".
+    """
+    cat_class = catalog_result.get("classification", "discovery_candidate")
+    motion = candidate.get("motion", {})
+    is_moving = motion.get("is_moving", False)
+    disp = motion.get("displacement_arcsec", 0.0)
+    psf_eval = candidate.get("psf_eval", {})
+    is_point_source = psf_eval.get("is_point_source", False)
+    confidence = candidate.get("confidence", 0.0)
+
+    if cat_class == "known_object":
+        return "known_object"
+
+    if is_moving and disp >= 0.5 and not catalog_result.get("matches"):
+        return "solar_system_target"
+
+    if cat_class in ("discovery_candidate", "unmatched_within_tolerance"):
+        if is_point_source and confidence >= 50.0:
+            return "high_priority_candidate"
+        if is_moving:
+            return "solar_system_target"
+        return cat_class
+
+    return cat_class
+
+
 CATALOG_CACHE_DIR = Path(__file__).resolve().parent / "cache" / "catalog_cache"
 CATALOG_CACHE_MAX_AGE_SEC = 7 * 24 * 3600
 
