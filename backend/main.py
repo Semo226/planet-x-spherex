@@ -14,10 +14,11 @@ from __future__ import annotations
 
 import sys
 import threading
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -258,6 +259,102 @@ class CatalogRequest(BaseModel):
 def catalog(req: CatalogRequest):
     """Cross-match position against Gaia DR3 + AllWISE."""
     return crossmatch(req.ra, req.dec, req.radius_arcsec, req.epoch)
+
+
+@app.get("/api/export-session")
+def export_session(format: str = Query("json")):
+    """Export the current session state, target metrics, differencing results, and candidates."""
+    with _lock:
+        frames = list(_session["frames"])
+        req_data = dict(_session.get("request") or {})
+        diff = dict(_session.get("diff") or {})
+        candidates = dict(_session.get("candidates") or {})
+
+    if not frames and not req_data:
+        raise HTTPException(status_code=400, detail="no active session to export")
+
+    ra = req_data.get("ra", 0.0)
+    dec = req_data.get("dec", 0.0)
+    fov = req_data.get("fov_size", 0.05)
+    det = req_data.get("detector")
+
+    time_range = {}
+    valid_tmins = [f["t_min"] for f in frames if f.get("t_min") is not None]
+    if valid_tmins:
+        min_mjd = min(valid_tmins)
+        max_mjd = max(valid_tmins)
+        time_range = {
+            "mjd_start": min_mjd,
+            "mjd_end": max_mjd,
+            "span_days": round(max_mjd - min_mjd, 2),
+            "iso_start": [f["t_min_iso"] for f in frames if f.get("t_min") == min_mjd][0] if frames else None,
+            "iso_end": [f["t_min_iso"] for f in frames if f.get("t_min") == max_mjd][0] if frames else None,
+        }
+
+    export_data = {
+        "export_time_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "target": {
+            "ra": ra,
+            "dec": dec,
+            "fov_size_deg": fov,
+            "fov_size_arcmin": round(fov * 60.0, 2),
+            "detector_filter": det,
+        },
+        "frames_summary": {
+            "total_frames": len(frames),
+            "time_range": time_range,
+            "detectors_present": sorted(list({f.get("detector") for f in frames if f.get("detector")})),
+        },
+        "differencing": {
+            "detector": diff.get("detector"),
+            "n_residual_frames": diff.get("n_frames", 0),
+            "limits": diff.get("limits"),
+            "align_method": diff.get("align_method", "wcs"),
+        },
+        "candidate_detection": {
+            "n_candidates": candidates.get("n_candidates", 0),
+            "stack_stats": candidates.get("stack_stats"),
+            "candidates": candidates.get("candidates", []),
+        },
+    }
+
+    if format == "json":
+        return JSONResponse(export_data)
+
+    md = f"""# SPHEREx Target Analysis Report
+**Generated:** {export_data['export_time_utc']}
+**Mission / Archive:** NASA Space Apps 2026 · SPHEREx IRSA Archive
+
+## 1. Target & Coordinate Parameters
+- **Center Coordinates:** RA = {ra:.6f}°, Dec = {dec:.6f}° (ICRS)
+- **Field of View (FOV):** {fov}° (~{fov*60:.1f} arcmin)
+- **Requested Detector:** {det or 'All arrays'}
+
+## 2. Multi-Epoch Observations
+- **Total Cutout Frames:** {len(frames)}
+- **Baseline Duration:** {time_range.get('span_days', 0)} days
+- **Epoch Range:** {time_range.get('iso_start', '—')} to {time_range.get('iso_end', '—')}
+- **Arrays Present:** {', '.join(export_data['frames_summary']['detectors_present']) or 'None'}
+
+## 3. Temporal Differencing & Registration
+- **Alignment Method:** {export_data['differencing']['align_method']}
+- **Template Detector:** {export_data['differencing']['detector'] or '—'}
+- **Residual Frames:** {export_data['differencing']['n_residual_frames']}
+- **Robust Limits:** {export_data['differencing']['limits'] or '—'}
+
+## 4. Candidate Detections & Motion
+- **Candidates Found:** {export_data['candidate_detection']['n_candidates']}
+"""
+    for i, c in enumerate(export_data['candidate_detection']['candidates']):
+        md += f"""
+### Candidate #{i+1} [{c.get('classification', 'candidate').upper()}]
+- **Position:** RA {c.get('ra_deg', 0):.6f}°, Dec {c.get('dec_deg', 0):.6f}°
+- **Confidence Rating:** {c.get('confidence', 0):.0f}% | **SNR:** {c.get('snr', 0):.1f} | **Epochs:** {c.get('n_epoch_detections', 0)}
+- **PSF Morphology:** {c.get('psf_eval', {}).get('morphology', '—')} (Score: {c.get('psf_eval', {}).get('psf_score', 0):.1f})
+- **Motion:** {'Moving' if c.get('motion', {}).get('is_moving') else 'Stationary'} ({c.get('motion', {}).get('displacement_arcsec', 0):.2f}″ displacement)
+- **Catalog Crossmatch:** {c.get('catalog_summary', 'No matches / unqueried')}
+"""
+    return PlainTextResponse(md, media_type="text/markdown")
 
 
 @app.get("/api/presets")

@@ -310,6 +310,82 @@ function renderCandidates(data) {
 }
 
 $("load").addEventListener("click", load);
+
+// Export JSON
+async function exportJSON() {
+  const res = await fetch('/api/export-session?format=json');
+  if (!res.ok) { setStatus('Export failed', 'error'); return; }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `session_${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Export markdown report
+async function exportReport() {
+  const res = await fetch('/api/export-session?format=markdown');
+  if (!res.ok) { setStatus('Report export failed', 'error'); return; }
+  const md = await res.text();
+  $('#modal-body').textContent = md;
+  $('#report-modal').hidden = false;
+}
+
+// Share link
+function copyShareLink() {
+  const params = {
+    ra: $('#ra').value,
+    dec: $('#dec').value,
+    fov: $('#fov').value,
+    maxframes: $('#maxframes').value,
+    det: $('#det-filter').value,
+    view: viewMode,
+    frame: current,
+  };
+  const hash = Object.entries(params)
+    .filter(([,v]) => v && v !== '')
+    .map(([k,v]) => `${k}=${encodeURIComponent(v)}`)
+    .join('&');
+  const url = `${location.origin}${location.pathname}#${hash}`;
+  navigator.clipboard.writeText(url).then(() => alert('Shareable link copied to clipboard'));
+}
+
+// Modal handlers
+$('#close-modal').addEventListener('click', () => { $('#report-modal').hidden = true; });
+$('#btn-copy-report').addEventListener('click', async () => {
+  const text = $('#modal-body').textContent;
+  await navigator.clipboard.writeText(text);
+  alert('Report markdown copied to clipboard');
+});
+$('#btn-print').addEventListener('click', () => { window.print(); });
+
+// Parse URL hash on page load
+function applyHashParams() {
+  if (!location.hash) return false;
+  const hash = location.hash.substring(1);
+  const pairs = hash.split('&');
+  const map = {};
+  pairs.forEach(p => { const [k,v] = p.split('='); if (k) map[k] = decodeURIComponent(v); });
+  if (map.ra) $('#ra').value = map.ra;
+  if (map.dec) $('#dec').value = map.dec;
+  if (map.fov) $('#fov').value = map.fov;
+  if (map.maxframes) $('#maxframes').value = map.maxframes;
+  if (map.det) $('#det-filter').value = map.det;
+  if (map.view) viewMode = map.view;
+  if (map.frame) current = parseInt(map.frame,10) || 0;
+  return true;
+}
+
+$('#btn-share').addEventListener('click', copyShareLink);
+$('#btn-export-json').addEventListener('click', exportJSON);
+$('#btn-export-report').addEventListener('click', exportReport);
+
+// Auto‑load if URL contains parameters
+if (applyHashParams()) {
+  setTimeout(load, 200);
+}
 $("run-candidates").addEventListener("click", runCandidates);
 $("view-orig").addEventListener("click", () => setViewMode("orig"));
 $("view-diff").addEventListener("click", () => setViewMode("diff"));

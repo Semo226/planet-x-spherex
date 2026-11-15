@@ -8,8 +8,17 @@
 </head>
 <body>
   <header>
-    <h1>Planet X and SPHEREx</h1>
-    <p class="subtitle">NASA Space Apps 2026 — SPHEREx epoch explorer</p>
+    <div class="header-main">
+      <div>
+        <h1>Planet X and SPHEREx</h1>
+        <p class="subtitle">NASA Space Apps 2026 — SPHEREx multi-epoch explorer & candidate pipeline</p>
+      </div>
+      <div class="header-actions">
+        <button id="btn-share" title="Copy shareable link with current parameters and view state">🔗 Share Link</button>
+        <button id="btn-export-json" title="Download machine-readable session report (JSON)">💾 Export JSON</button>
+        <button id="btn-export-report" title="Generate printable judge/researcher snapshot report">📋 Snapshot Report</button>
+      </div>
+    </div>
   </header>
 
   <section class="controls">
@@ -23,7 +32,29 @@
     </div>
     <div class="field">
       <label for="fov">FOV (deg)</label>
-      <input id="fov" type="number" step="any" value="0.05" min="0.005" max="1" />
+      <div class="input-with-presets">
+        <input id="fov" type="number" step="any" value="0.05" min="0.005" max="1" />
+        <select id="fov-preset" title="Quick FOV presets">
+          <option value="">Presets</option>
+          <option value="0.0083">30″ (0.008°)</option>
+          <option value="0.0167">1′ (0.017°)</option>
+          <option value="0.05" selected>3′ (0.05° · Std)</option>
+          <option value="0.10">6′ (0.10°)</option>
+          <option value="0.25">15′ (0.25°)</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label for="det-filter">Detector</label>
+      <select id="det-filter" title="Filter timeline and processing by detector array">
+        <option value="">All Arrays</option>
+        <option value="D1">D1 (0.75–1.1 µm)</option>
+        <option value="D2">D2 (1.1–1.6 µm)</option>
+        <option value="D3">D3 (1.6–2.4 µm)</option>
+        <option value="D4">D4 (2.4–3.5 µm)</option>
+        <option value="D5">D5 (3.5–4.4 µm)</option>
+        <option value="D6">D6 (4.4–5.0 µm)</option>
+      </select>
     </div>
     <div class="field">
       <label for="maxframes">Max frames</label>
@@ -36,8 +67,26 @@
   <div id="status" class="status">Ready.</div>
 
   <main class="viewer-layout">
-    <div class="viewer">
-      <img id="frame-img" alt="SPHEREx cutout frame" />
+    <div class="viewer" id="viewer-container">
+      <div class="viewer-toolbar">
+        <button id="zoom-in" title="Zoom in">+</button>
+        <span id="zoom-val">100%</span>
+        <button id="zoom-out" title="Zoom out">−</button>
+        <button id="zoom-reset" title="Fit to viewport">Fit</button>
+        <button id="toggle-pixelated" class="active" title="Toggle crisp astronomical pixels vs smooth interpolation">Crisp</button>
+        <button id="toggle-reticle" class="active" title="Toggle center target crosshair reticle">🎯 Reticle</button>
+        <button id="toggle-invert" title="Invert color stretch">Invert</button>
+      </div>
+
+      <div class="image-wrapper" id="image-wrapper">
+        <img id="frame-img" class="crisp" alt="SPHEREx cutout frame" />
+        <div id="reticle" class="reticle active">
+          <div class="reticle-h"></div>
+          <div class="reticle-v"></div>
+          <div class="reticle-ring"></div>
+        </div>
+      </div>
+
       <div id="empty" class="empty">No data loaded.<br/>Enter coordinates and press <b>Load / Search</b>.</div>
     </div>
 
@@ -88,6 +137,21 @@
     </label>
     <span id="frame-count" class="frame-count">0 / 0</span>
   </section>
+
+  <!-- Printable Snapshot Report Modal -->
+  <div id="report-modal" class="modal" hidden>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h2>Session Snapshot Report</h2>
+        <button id="close-modal" class="btn-close" title="Close report">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-footer">
+        <button id="btn-print" class="primary">🖨 Print / Save PDF</button>
+        <button id="btn-copy-report">📋 Copy Markdown</button>
+      </div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>
